@@ -1,374 +1,60 @@
---// Capri Menu - Lock/Unlock FOV Center & Player-Only ESP
---// Optimized for Delta Executor
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local Camera = workspace.CurrentCamera
-local LocalPlayer = Players.LocalPlayer
-
--- Clear menu cũ nếu đang chạy
-if CoreGui:FindFirstChild("CapriMenuGui") then 
-    CoreGui.CapriMenuGui:Destroy() 
-end
-
---// Antiban & Bypass cơ bản khi vừa Execute
-pcall(function()
-    local mt = getrawmetatable(game)
-    setreadonly(mt, false)
-    local oldNamecall = mt.__namecall
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        if method == "Kick" or method == "kick" then
-            return nil
-        end
-        return oldNamecall(self, ...)
-    end)
-    setreadonly(mt, true)
-end)
-
-getgenv().Capri = {
-    KA = false,
-    AB = false,
-    ESP = false,
-    HB = false,
-    UnlockFOV = false, -- Chế độ Unlock để di chuyển tâm vòng tròn
-    HBSize = 15,       -- Kích thước Hitbox mở rộng cho người chơi khác
-    FOV = 150,         -- Bán kính vòng tròn FOV
-    MaxDist = 420,     -- Tầm xa Aimbot tối đa (420m)
-    
-    -- Tọa độ vị trí vòng tròn (mặc định ở giữa màn hình)
-    PosX = Camera.ViewportSize.X / 2,
-    PosY = Camera.ViewportSize.Y / 2,
-    
-    PlayerTimers = {}
-}
-
---// GUI Setup
-local GUI = Instance.new("ScreenGui")
-GUI.Name = "CapriMenuGui"
-GUI.ResetOnSpawn = false
-
-local success = pcall(function()
-    GUI.Parent = CoreGui
-end)
-if not success then
-    GUI.Parent = LocalPlayer:WaitForChild("PlayerGui")
-end
-
--- Nút ẩn/hiện Menu
-local Toggle = Instance.new("ImageButton", GUI)
-Toggle.Size = UDim2.new(0, 50, 0, 50)
-Toggle.Position = UDim2.new(0.02, 0, 0.15, 0)
-Toggle.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-Toggle.Draggable = true
-Toggle.Active = true
-Instance.new("UICorner", Toggle).CornerRadius = UDim.new(1, 0)
-
--- Khung Menu Chính
-local Main = Instance.new("Frame", GUI)
-Main.Size = UDim2.new(0, 240, 0, 380)
-Main.Position = UDim2.new(0.02, 0, 0.24, 0)
-Main.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-Main.Visible = false
-Main.Draggable = true
-Main.Active = true
-Main.BorderColor3 = Color3.fromRGB(0, 255, 128)
-Main.BorderSizePixel = 2
-Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 10)
-
-local Title = Instance.new("TextLabel", Main)
-Title.Size = UDim2.new(1, 0, 0, 40)
-Title.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
-Title.Text = "CAPRI MENU"
-Title.TextColor3 = Color3.fromRGB(0, 255, 128)
-Title.Font = Enum.Font.SourceSansBold
-Title.TextSize = 18
-Instance.new("UICorner", Title).CornerRadius = UDim.new(0, 10)
-
--- Label hiển thị trạng thái Antiban luôn bật
-local AntibanLabel = Instance.new("TextLabel", Main)
-AntibanLabel.Size = UDim2.new(0, 200, 0, 25)
-AntibanLabel.Position = UDim2.new(0.08, 0, 0.11, 0)
-AntibanLabel.BackgroundTransparency = 1
-AntibanLabel.Text = "Antiban: ALWAYS ON"
-AntibanLabel.TextColor3 = Color3.fromRGB(50, 255, 50)
-AntibanLabel.Font = Enum.Font.SourceSansBold
-AntibanLabel.TextSize = 13
-
--- Hàm khởi tạo nút bấm bật/tắt
-local function addBtn(name, y, key)
-    local b = Instance.new("TextButton", Main)
-    b.Size = UDim2.new(0, 200, 0, 32)
-    b.Position = UDim2.new(0.08, 0, y, 0)
-    b.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
-    b.Text = name .. ": OFF"
-    b.TextColor3 = Color3.fromRGB(255, 50, 50)
-    b.Font = Enum.Font.SourceSansSemibold
-    b.TextSize = 13
-    Instance.new("UICorner", b).CornerRadius = UDim.new(0, 6)
-
-    b.MouseButton1Click:Connect(function()
-        getgenv().Capri[key] = not getgenv().Capri[key]
-        local state = getgenv().Capri[key]
-        b.Text = name .. (state and ": ON" or ": OFF")
-        b.TextColor3 = state and Color3.fromRGB(50, 255, 50) or Color3.fromRGB(255, 50, 50)
-        b.BackgroundColor3 = state and Color3.fromRGB(20, 60, 20) or Color3.fromRGB(45, 45, 55)
-    end)
-end
-
-addBtn("Kill Aura (3.387M / 2s)", 0.18, "KA")
-addBtn("Aimbot Body (420m)", 0.31, "AB")
-addBtn("ESP + Distance & Line", 0.44, "ESP")
-addBtn("Expand Hitbox (Others)", 0.57, "HB")
-addBtn("Unlock FOV (Move Center)", 0.70, "UnlockFOV")
-
-local isOpen = false
-Toggle.MouseButton1Click:Connect(function()
-    isOpen = not isOpen
-    Main.Visible = isOpen
-    Toggle.BackgroundColor3 = isOpen and Color3.fromRGB(50, 150, 50) or Color3.fromRGB(30, 30, 30)
-end)
-
---// Visuals & Logic
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Visible = false
-FOVCircle.Radius = getgenv().Capri.FOV
-FOVCircle.Filled = false
-FOVCircle.Color = Color3.fromRGB(0, 255, 128)
-FOVCircle.Thickness = 1.5
-FOVCircle.Transparency = 0.8
-
--- Nút kéo thả tâm xuất hiện khi bật Unlock FOV
-local DragButton = Instance.new("TextButton", GUI)
-DragButton.Size = UDim2.new(0, 45, 0, 45)
-DragButton.AnchorPoint = Vector2.new(0.5, 0.5)
-DragButton.Position = UDim2.new(0.5, 0, 0.5, 0)
-DragButton.BackgroundColor3 = Color3.fromRGB(0, 255, 128)
-DragButton.BackgroundTransparency = 0.4
-DragButton.Text = "TÂM"
-DragButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-DragButton.Font = Enum.Font.SourceSansBold
-DragButton.TextSize = 14
-DragButton.Visible = false
-Instance.new("UICorner", DragButton).CornerRadius = UDim.new(1, 0)
-
-local draggingFOV = false
-DragButton.MouseButton1Down:Connect(function()
-    if getgenv().Capri.UnlockFOV then
-        draggingFOV = true
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        draggingFOV = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if draggingFOV and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local mousePos = input.Position
-        getgenv().Capri.PosX = mousePos.X
-        getgenv().Capri.PosY = mousePos.Y
-        DragButton.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
-    end
-end)
-
-local function getBodyPart(char)
-    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-end
-
-local function getTarget()
-    local target, shortest = nil, getgenv().Capri.FOV
-    local C = getgenv().Capri
-    local center = Vector2.new(C.PosX, C.PosY)
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return nil end
-
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-            local hum = p.Character:FindFirstChildOfClass("Humanoid")
-            local bodyPart = getBodyPart(p.Character)
-            local dist = (myRoot.Position - p.Character.HumanoidRootPart.Position).Magnitude
+--// Target Selector Engine (Tối ưu hóa cho PC / Xeno)
+task.spawn(function()
+    while task.wait(0.05) do
+        local C = getgenv().Capri
+        -- Ép bán kính FOV chuẩn trên PC
+        local currentFOV = C.SuperZone_Active and 500 or (C.FOV or 250)
+        C.FOV = currentFOV
+        
+        local best, shortest = nil, (C.Aim360 and C.MaxDist or C.FOV) 
+        local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        
+        if root then
+            local potential = {}
+            for _, p in pairs(Players:GetPlayers()) do 
+                if p ~= LocalPlayer and p.Character then 
+                    table.insert(potential, p.Character) 
+                end 
+            end
             
-            if hum and hum.Health > 0 and bodyPart and dist <= C.MaxDist then
-                local pos, onScreen = Camera:WorldToViewportPoint(bodyPart.Position)
-                if onScreen then
-                    local screenDist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
-                    if screenDist < shortest then
-                        shortest = screenDist
-                        target = p.Character
-                    end
-                end
+            if workspace:FindFirstChild("Enemies") then 
+                for _, e in pairs(workspace.Enemies:GetChildren()) do 
+                    table.insert(potential, e) 
+                end 
             end
-        end
-    end
-    return target
-end
-
-local lastAuraTick = 0
-local espDrawings = {}
-
-RunService.RenderStepped:Connect(function()
-    local C = getgenv().Capri
-    
-    -- Hiển thị nút kéo thả khi bật Unlock FOV
-    DragButton.Visible = C.UnlockFOV
-    if not C.UnlockFOV and not draggingFOV then
-        DragButton.Position = UDim2.new(0, C.PosX, 0, C.PosY)
-    end
-
-    -- Cập nhật vòng tròn FOV bám theo tọa độ tâm tùy chỉnh
-    FOVCircle.Visible = C.AB
-    FOVCircle.Position = Vector2.new(C.PosX, C.PosY)
-
-    -- 1. Aimbot Logic (Tầm 420m, ngắm vào Thân dựa theo tâm đã chọn)
-    if C.AB then
-        local targetChar = getTarget()
-        if targetChar then
-            local bodyPart = getBodyPart(targetChar)
-            if bodyPart then
-                local bodyPos = bodyPart.Position
-                LocalPlayer.Character:SetPrimaryPartCFrame(CFrame.new(LocalPlayer.Character.PrimaryPart.Position, Vector3.new(bodyPos.X, LocalPlayer.Character.PrimaryPart.Position.Y, bodyPos.Z)))
-                Camera.CFrame = CFrame.new(Camera.CFrame.Position, bodyPos)
-            end
-        end
-    end
-
-    -- 2. Tăng Hitbox toàn bộ người chơi khác (Trừ bản thân)
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
-                if C.HB then
-                    hrp.Size = Vector3.new(C.HBSize, C.HBSize, C.HBSize)
-                    hrp.Transparency = 0.5
-                    hrp.CanCollide = false
-                else
-                    hrp.Size = Vector3.new(2, 2, 1)
-                    hrp.Transparency = 1
-                    hrp.CanCollide = false
-                end
-            end
-        end
-    end
-
-    -- 3. Kill Aura Logic (3.387.500 sát thương)
-    if C.KA then
-        if tick() - lastAuraTick >= 2.0 then
-            lastAuraTick = tick()
-            pcall(function()
-                local char = LocalPlayer.Character
-                local root = char and char:FindFirstChild("HumanoidRootPart")
-                if root then
-                    local searchFolder = workspace:FindFirstChild("Enemies") or workspace
-                    for _, obj in ipairs(searchFolder:GetDescendants()) do
-                        if obj:IsA("Model") and obj ~= char then
-                            local hum, hrp = obj:FindFirstChildOfClass("Humanoid"), obj:FindFirstChild("HumanoidRootPart")
-                            if hum and hrp and hum.Health > 0 and (root.Position - hrp.Position).Magnitude <= 100 then
-                                local isPlayer = Players:GetPlayerFromCharacter(obj) ~= nil
-                                if not isPlayer then
-                                    hum:TakeDamage(3387500)
-                                else
-                                    local pName = obj.Name
-                                    if not C.PlayerTimers[pName] then
-                                        C.PlayerTimers[pName] = tick()
-                                    elseif tick() - C.PlayerTimers[pName] >= 1.0 then
-                                        hum:TakeDamage(50)
-                                        C.PlayerTimers[pName] = tick()
+            
+            local mouseLocation = UserInputService:GetMouseLocation()
+            
+            for _, char in pairs(potential) do
+                local hPart = char:FindFirstChild("HumanoidRootPart")
+                local hum = char:FindFirstChild("Humanoid")
+                if hPart and hum and hum.Health > 0 then
+                    local mag = (hPart.Position - root.Position).Magnitude
+                    if mag <= C.MaxDist then
+                        local isNPC = not Players:GetPlayerFromCharacter(char)
+                        -- Kiểm tra điều kiện bật Aim cho NPC hoặc Player
+                        if (isNPC and C.SilentAim_NPC) or (not isNPC and (C.SilentAim_Player or C.CamLock_Player or C.Aim_Active)) then
+                            if C.Aim360 then
+                                if mag < shortest then
+                                    shortest = mag
+                                    best = hPart
+                                end
+                            else
+                                local screenPos, onScreen = Camera:WorldToViewportPoint(hPart.Position)
+                                if onScreen then
+                                    -- Tính khoảng cách từ tâm chuột (hoặc tâm màn hình) đến đối tượng
+                                    local screenDist = (Vector2.new(screenPos.X, screenPos.Y) - mouseLocation).Magnitude
+                                    if screenDist <= C.FOV and screenDist < shortest then
+                                        shortest = screenDist
+                                        best = hPart
                                     end
                                 end
                             end
                         end
                     end
                 end
-            end)
-        end
-    else
-        C.PlayerTimers = {}
-    end
-
-    -- 4. ESP Render Logic (CHỈ HIỂN THỊ TRÊN NGƯỜI CHƠI KHÁC)
-    if C.ESP then
-        local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local activeDrawings = {}
-
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-                local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                local hrp = p.Character.HumanoidRootPart
-                
-                if hum and hum.Health > 0 then
-                    local drawingObj = espDrawings[p]
-                    if not drawingObj then
-                        local box = Drawing.new("Square")
-                        box.Color = Color3.fromRGB(0, 255, 128)
-                        box.Thickness = 1.5
-                        box.Filled = false
-                        
-                        local nameTag = Drawing.new("Text")
-                        nameTag.Color = Color3.fromRGB(255, 255, 255)
-                        nameTag.Size = 14
-                        nameTag.Center = true
-                        nameTag.Outline = true
-                        
-                        local line = Drawing.new("Line")
-                        line.Color = Color3.fromRGB(0, 255, 128)
-                        line.Thickness = 1
-                        line.Transparency = 0.7
-                        
-                        drawingObj = {box = box, name = nameTag, line = line}
-                        espDrawings[p] = drawingObj
-                    end
-                    
-                    activeDrawings[p] = true
-                    local pos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-                    if onScreen then
-                        local size = Vector2.new(2500 / pos.Z, 3500 / pos.Z)
-                        drawingObj.box.Size = size
-                        drawingObj.box.Position = Vector2.new(pos.X - size.X / 2, pos.Y - size.Y / 2)
-                        drawingObj.box.Visible = true
-                        
-                        -- Tính khoảng cách mét
-                        local distText = ""
-                        if myRoot then
-                            local distance = math.floor((myRoot.Position - hrp.Position).Magnitude)
-                            distText = " [" .. distance .. "m]"
-                        end
-
-                        drawingObj.name.Text = p.Name .. " [" .. math.floor(hum.Health) .. " HP]" .. distText
-                        drawingObj.name.Position = Vector2.new(pos.X, pos.Y - size.Y / 2 - 20)
-                        drawingObj.name.Visible = true
-                        
-                        -- Đường line xuất phát từ đúng tâm tùy chỉnh đang chọn
-                        drawingObj.line.From = Vector2.new(C.PosX, C.PosY)
-                        drawingObj.line.To = Vector2.new(pos.X, pos.Y)
-                        drawingObj.line.Visible = true
-                    else
-                        drawingObj.box.Visible = false
-                        drawingObj.name.Visible = false
-                        drawingObj.line.Visible = false
-                    end
-                end
             end
+            C.CurrentTarget = best
         end
-
-        -- Dọn dẹp các Drawing cũ của người chơi đã rời đi
-        for p, obj in pairs(espDrawings) do
-            if not activeDrawings[p] then
-                obj.box:Remove()
-                obj.name:Remove()
-                obj.line:Remove()
-                espDrawings[p] = nil
-            end
-        end
-    else
-        for _, obj in pairs(espDrawings) do
-            obj.box:Remove()
-            obj.name:Remove()
-            obj.line:Remove()
-        end
-        espDrawings = {}
     end
 end)
