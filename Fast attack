@@ -1,0 +1,650 @@
+pcall(function()
+    loadstring(game:HttpGet("https://raw.githubusercontent.com/AnhDangNhoEm/TuanAnhIOS/refs/heads/main/koby"))()
+end)
+
+-- ==========================================
+-- SERVICES
+-- ==========================================
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
+
+-- PLAYER & CHARACTER
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Humanoid = Character:WaitForChild("Humanoid")
+local HumanoidRootPart = Character:WaitForChild("HumanoidRootPart")
+local Root = HumanoidRootPart
+
+Player.CharacterAdded:Connect(function(newChar)
+    Character = newChar
+    Humanoid = newChar:WaitForChild("Humanoid")
+    HumanoidRootPart = newChar:WaitForChild("HumanoidRootPart")
+    Root = HumanoidRootPart
+end)
+
+-- EXPLOIT CHECK
+local executor = (getexecutorname and getexecutorname()) or (identifyexecutor and identifyexecutor())
+if executor then
+    if
+        string.find(executor, "Bunni") or
+        string.find(executor, "FluxusZ") or
+        string.find(executor, "Delta") or
+        string.find(executor, "Arceus") or
+        string.find(executor, "Xeno") or
+        string.find(executor, "Swift") or
+        string.find(executor, "Awp") or
+        string.find(executor, "Volcano") or
+        string.find(executor, "Argon") or
+        string.find(executor, "Macsploit") or
+        string.find(executor, "Potassium") or
+        string.find(executor, "CodeX") or
+        string.find(executor, "Velocity") or
+        string.find(executor, "Romix") or
+        string.find(executor, "Neutron")
+    then
+        print("ok")
+    else
+        Player:Kick("Please use Delta Exploit or PC use volcano or Exploit paid!")
+    end
+end
+
+-- DEFAULT VARS & AUTO FARM STATE
+TypeMastery = TypeMastery or "Level"
+KillPercent = KillPercent or 20
+Pos = Pos or CFrame.new(0, 12, 0)
+_G.Fast_Delay = _G.Fast_Delay or 0.05
+
+_G.SelectedNPC = nil
+_G.AutoFarmNPC = false
+_G.BringMob = false
+_G.BringRange = 180
+_G.FarmSearchRange = 5000
+
+-- ==========================================
+-- LOAD UI LIBRARY (HDanh Hub)
+-- ==========================================
+Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/hdanhhub/UI/refs/heads/main/ui_BananaHub_final.lua"))()
+
+Window = Library:CreateWindow({
+    Title = "Capri Hub",
+    Desc = "- Blox Fruit",
+    Image = "rbxassetid://123613996022560"
+})
+
+local function makeProxy(obj, callbackHolder)
+    local proxy = {}
+    setmetatable(proxy, {
+        __index = function(_, k)
+            if k == "OnChanged" then
+                return function(_, fn)
+                    callbackHolder.extra = fn
+                    return proxy
+                end
+            end
+            if k == "SetStage" and obj and obj.SetStage then
+                return function(_, v) pcall(obj.SetStage, v) end
+            end
+            if k == "SetValue" then
+                return function(_, v)
+                    if obj and obj.SetValue then
+                        local ok = pcall(obj.SetValue, v)
+                        if not ok then pcall(function() obj:SetValue(v) end) end
+                    end
+                end
+            end
+            if k == "GetValue" then
+                return function(_)
+                    if obj and obj.GetValue then
+                        local ok, val = pcall(obj.GetValue)
+                        if ok then return val end
+                        local ok2, val2 = pcall(function() return obj:GetValue() end)
+                        return val2
+                    end
+                end
+            end
+            if k == "SetText" or k == "SetDesc" then
+                return function(_, t)
+                    if obj then
+                        if obj.SetText then pcall(obj.SetText, obj, t)
+                        elseif obj.SetDesc then pcall(obj.SetDesc, obj, t) end
+                    end
+                end
+            end
+            if k == "GetNewList" then
+                return function(_, list)
+                    if obj and obj.GetNewList then pcall(obj.GetNewList, obj, list) end
+                end
+            end
+            if k == "ClearText" then
+                return function(_, v)
+                    if obj and obj.ClearText then pcall(obj.ClearText, obj, v) end
+                end
+            end
+            local v = obj and (rawget(obj, k) or (type(obj) == "table" and obj[k]))
+            if type(v) == "function" then
+                return function(_, ...) return pcall(v, obj, ...) end
+            end
+            return v
+        end
+    })
+    return proxy
+end
+
+local function wrapTab(rawTab)
+    local _currentSection = nil
+    local _nextIsRight = false
+
+    local function ensureSection()
+        if not _currentSection then
+            _currentSection = rawTab:AddLeftGroupbox(" ")
+        end
+    end
+
+    local wrapped = {}
+
+    function wrapped:AddSection(name)
+        if _nextIsRight then
+            _currentSection = rawTab:AddRightGroupbox(name or " ")
+            _nextIsRight = false
+        else
+            _currentSection = rawTab:AddLeftGroupbox(name or " ")
+            _nextIsRight = true
+        end
+        return _currentSection
+    end
+
+    function wrapped:AddToggle(id, setting)
+        ensureSection()
+        local holder = { extra = nil }
+        local origCb = setting.Callback
+        setting.Callback = function(v)
+            if origCb then pcall(origCb, v) end
+            if holder.extra then pcall(holder.extra, v) end
+        end
+        setting.Description = nil
+        local obj = _currentSection:AddToggle(id, setting)
+        return makeProxy(obj, holder)
+    end
+
+    function wrapped:AddButton(setting, cb)
+        ensureSection()
+        if type(setting) == "table" then
+            setting.Description = nil
+        end
+        local obj = _currentSection:AddButton(setting, cb)
+        if obj then
+            return makeProxy(obj, {})
+        end
+    end
+
+    function wrapped:AddDropdown(id, setting)
+        ensureSection()
+        local holder = { extra = nil }
+        local origCb = setting.Callback
+        setting.Callback = function(v)
+            if origCb then pcall(origCb, v) end
+            if holder.extra then pcall(holder.extra, v) end
+        end
+        setting.Description = nil
+        local obj = _currentSection:AddDropdown(id, setting)
+        return makeProxy(obj, holder)
+    end
+
+    function wrapped:AddSlider(id, setting)
+        ensureSection()
+        local holder = { extra = nil }
+        local origCb = setting.Callback
+        setting.Callback = function(v)
+            if origCb then pcall(origCb, v) end
+            if holder.extra then pcall(holder.extra, v) end
+        end
+        setting.Description = nil
+        local obj = _currentSection:AddSlider(setting)
+        return makeProxy(obj, holder)
+    end
+
+    function wrapped:AddParagraph(setting)
+        ensureSection()
+        local title = setting.Title or ""
+        local desc  = setting.Description or setting.Desc or ""
+        local txt   = desc ~= "" and (title .. "\n" .. desc) or title
+        local obj = _currentSection:AddLabel(txt)
+        return makeProxy(obj, {})
+    end
+
+    function wrapped:AddLabel(text)
+        ensureSection()
+        local obj = _currentSection:AddLabel(text)
+        return makeProxy(obj, {})
+    end
+
+    return wrapped
+end
+
+Tabs = {
+    ["Info"]     = wrapTab(Window:AddTab("Thông Tin")),
+    ["Main"]     = wrapTab(Window:AddTab("Cày Cấp")),
+    ["Sea"]      = wrapTab(Window:AddTab("Sự Kiện")),
+    ["Item"]     = wrapTab(Window:AddTab("Lấy & Nâng Cấp Vật Phẩm")),
+    ["Setting"]  = wrapTab(Window:AddTab("Cài Đặt")),
+    ["Status"]   = wrapTab(Window:AddTab("Webhook")),
+    ["Stats"]    = wrapTab(Window:AddTab("Chỉ Số")),
+    ["Player"]   = wrapTab(Window:AddTab("Người Chơi")),
+    ["Teleport"] = wrapTab(Window:AddTab("Dịch Chuyển")),
+    ["Visual"]   = wrapTab(Window:AddTab("Giả Mạo")),
+    ["Fruit"]    = wrapTab(Window:AddTab("Trái Ác Quỷ")),
+    ["Raid"]     = wrapTab(Window:AddTab("Đột Kích")),
+    ["Race"]     = wrapTab(Window:AddTab("Nâng Cấp Chủng Tộc")),
+    ["Shop"]     = wrapTab(Window:AddTab("Cửa Hàng")),
+    ["Misc"]     = wrapTab(Window:AddTab("Khác")),
+}
+
+pcall(function()
+    if Library.SetTheme then
+        Library:SetTheme({
+            Background         = Color3.fromRGB(255, 182, 193),
+            Accent             = Color3.fromRGB(255, 20, 147),
+            PrimaryText        = Color3.fromRGB(255, 255, 255),
+            SecondaryText      = Color3.fromRGB(255, 220, 230),
+            Divider            = Color3.fromRGB(255, 105, 180),
+            Header             = Color3.fromRGB(220, 20, 90),
+            Box                = Color3.fromRGB(255, 145, 175),
+            Button             = Color3.fromRGB(255, 20, 147),
+            Hover              = Color3.fromRGB(255, 80, 160),
+            Toggle             = Color3.fromRGB(255, 20, 147),
+            ToggleBackground   = Color3.fromRGB(255, 182, 193),
+            Dropdown           = Color3.fromRGB(255, 145, 175),
+            DropdownBackground = Color3.fromRGB(255, 182, 193),
+            Scrollbar          = Color3.fromRGB(255, 20, 147),
+            Outline            = Color3.fromRGB(255, 105, 180),
+            Shadow             = Color3.fromRGB(180, 0, 80),
+        })
+    end
+end)
+
+task.wait(0.3)
+pcall(function()
+    Library:Notify({
+        Title = "Capri Hub",
+        Description = "Đã tải Auto Farm + Quét NPC + Gom Quái.",
+        Duration = 4
+    })
+end)
+
+-- Anti AFK
+Player.Idled:Connect(function()
+    VirtualUser:Button2Down(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+    task.wait()
+    VirtualUser:Button2Up(Vector2.new(0, 0), workspace.CurrentCamera.CFrame)
+end)
+
+-- ==========================================
+-- CORE MOVEMENT, SCAN NPC & BRING MOB
+-- ==========================================
+local function isAliveMob(model)
+    if not model or not model.Parent then return false end
+    local hum = model:FindFirstChildOfClass("Humanoid")
+    local hrp = model:FindFirstChild("HumanoidRootPart")
+    if not hum or not hrp or hum.Health <= 0 then return false end
+    if Players:GetPlayerFromCharacter(model) then return false end
+    return true
+end
+
+local function ScanMapNPCs()
+    local names = {}
+    local seen = {}
+
+    local function collectFromContainer(container)
+        if not container then return end
+        for _, obj in ipairs(container:GetChildren()) do
+            if obj:IsA("Model") and isAliveMob(obj) then
+                if not seen[obj.Name] then
+                    seen[obj.Name] = true
+                    table.insert(names, obj.Name)
+                end
+            end
+        end
+    end
+
+    collectFromContainer(Workspace:FindFirstChild("Enemies"))
+    collectFromContainer(Workspace)
+
+    table.sort(names)
+    if #names == 0 then
+        table.insert(names, "Không có NPC/Quái")
+    end
+    return names
+end
+
+function BKP(targetCF)
+    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp or not targetCF then return end
+    hrp.CFrame = targetCF
+    task.wait()
+    if hrp and hrp.Parent then
+        hrp.CFrame = targetCF
+    end
+end
+
+function EquipTool(toolName)
+    if not toolName then return end
+    local char = Player.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    local tool = Player.Backpack:FindFirstChild(toolName)
+    if hum and tool and tool:IsA("Tool") then
+        hum:EquipTool(tool)
+    end
+end
+
+function AutoHaki()
+    pcall(function()
+        if Player.Character and not Player.Character:FindFirstChild("HasBuso") then
+            ReplicatedStorage.Remotes.CommF_:InvokeServer("Buso")
+        end
+    end)
+end
+
+function AttackNoCoolDown()
+    local char = Player.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool then return end
+
+    local pivotPos = char:GetPivot().Position
+    if tool:FindFirstChild("LeftClickRemote") then
+        local idx = 1
+        local enemiesFolder = Workspace:FindFirstChild("Enemies")
+        if enemiesFolder then
+            for _, mob in ipairs(enemiesFolder:GetChildren()) do
+                local hrp = mob:FindFirstChild("HumanoidRootPart")
+                if hrp and isAliveMob(mob) and (hrp.Position - pivotPos).Magnitude <= 60 then
+                    local dir = (hrp.Position - pivotPos).Unit
+                    pcall(function()
+                        tool.LeftClickRemote:FireServer(dir, idx)
+                    end)
+                    idx = idx >= 1000000000 and 1 or (idx + 1)
+                end
+            end
+        end
+    else
+        local targets = {}
+        local lastHead = nil
+        local enemiesFolder = Workspace:FindFirstChild("Enemies")
+        if enemiesFolder then
+            for _, mob in ipairs(enemiesFolder:GetChildren()) do
+                if not mob:GetAttribute("IsBoat") and isAliveMob(mob) then
+                    local head = mob:FindFirstChild("Head") or mob:FindFirstChild("HumanoidRootPart")
+                    if head and (pivotPos - head.Position).Magnitude <= 60 then
+                        table.insert(targets, { mob, head })
+                        lastHead = head
+                    end
+                end
+            end
+        end
+        if not lastHead or #targets == 0 then return end
+        pcall(function()
+            local net = ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net")
+            net:WaitForChild("RE/RegisterAttack"):FireServer(1e-9)
+            net:WaitForChild("RE/RegisterHit"):FireServer(lastHead, targets)
+        end)
+    end
+end
+
+-- Gom quái xung quanh về điểm trung tâm (centerCF)
+local function BringMobsTo(centerCF, targetNameOnly)
+    if not _G.BringMob or not centerCF then return end
+    pcall(function()
+        local centerPos = centerCF.Position
+        local enemiesFolder = Workspace:FindFirstChild("Enemies")
+        if not enemiesFolder then return end
+
+        for _, mob in ipairs(enemiesFolder:GetChildren()) do
+            if isAliveMob(mob) then
+                local nameMatch = (not targetNameOnly) or (mob.Name == targetNameOnly)
+                if nameMatch then
+                    local mHrp = mob:FindFirstChild("HumanoidRootPart")
+                    local mHum = mob:FindFirstChildOfClass("Humanoid")
+                    if mHrp and mHum then
+                        local dist = (mHrp.Position - centerPos).Magnitude
+                        if dist > 6 and dist <= _G.BringRange then
+                            mHrp.Size = Vector3.new(50, 50, 50)
+                            mHrp.CanCollide = false
+                            mHrp.CFrame = centerCF * CFrame.new(math.random(-4, 4), 0, math.random(-4, 4))
+                            pcall(function()
+                                mHrp.AssemblyLinearVelocity = Vector3.zero
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+
+local function FindTargetMob(selectedName)
+    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+    if not hrp then return nil end
+
+    local bestMob = nil
+    local shortest = _G.FarmSearchRange
+
+    local function checkContainer(container)
+        if not container then return end
+        for _, mob in ipairs(container:GetChildren()) do
+            if isAliveMob(mob) then
+                if not selectedName or selectedName == "" or selectedName == "Không có NPC/Quái" or mob.Name == selectedName then
+                    local mHrp = mob:FindFirstChild("HumanoidRootPart")
+                    if mHrp then
+                        local d = (hrp.Position - mHrp.Position).Magnitude
+                        if d < shortest then
+                            shortest = d
+                            bestMob = mob
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    checkContainer(Workspace:FindFirstChild("Enemies"))
+    if not bestMob then
+        checkContainer(Workspace)
+    end
+    return bestMob
+end
+
+-- NoClip khi đang Auto Farm hoặc Gom Quái
+RunService.Stepped:Connect(function()
+    pcall(function()
+        if _G.AutoFarmNPC or _G.BringMob then
+            local char = Player.Character
+            if char then
+                for _, part in ipairs(char:GetDescendants()) do
+                    if part:IsA("BasePart") then
+                        part.CanCollide = false
+                    end
+                end
+            end
+        end
+    end)
+end)
+
+-- ==========================================
+-- UI: THÔNG TIN & AUTO FARM / QUÉT NPC / GOM QUÁI
+-- ==========================================
+Tabs.Info:AddSection("Thông Tin")
+Tabs.Info:AddButton({
+    ["Title"] = "Capri Community",
+    ["Callback"] = function()
+        pcall(function() setclipboard("https://dsc.gg/nopermc") end)
+    end
+})
+Tabs.Info:AddParagraph({
+    ["Title"] = "Client Đang Dùng",
+    ["Description"] = tostring(executor or "Unknown")
+})
+
+ChooseWeapon = "Melee"
+SelectWeapon = nil
+
+Tabs.Main:AddSection("Auto Farm & Quét NPC")
+
+local weaponDrop = Tabs.Main:AddDropdown("DropdownSelectWeapon", {
+    ["Title"] = "Vũ Khí",
+    ["Values"] = { "Melee", "Sword", "Blox Fruit" },
+    ["Multi"] = false,
+    ["Default"] = 1
+})
+weaponDrop:SetValue("Melee")
+weaponDrop:OnChanged(function(val)
+    ChooseWeapon = val
+end)
+
+task.spawn(function()
+    while task.wait(0.25) do
+        pcall(function()
+            local sources = { Player.Backpack }
+            if Player.Character then
+                table.insert(sources, Player.Character)
+            end
+            for _, src in ipairs(sources) do
+                for _, t in ipairs(src:GetChildren()) do
+                    if t:IsA("Tool") and t.ToolTip == ChooseWeapon then
+                        SelectWeapon = t.Name
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+local initialNPCs = ScanMapNPCs()
+_G.SelectedNPC = initialNPCs[1]
+
+local npcDropdown = Tabs.Main:AddDropdown("DropdownSelectNPC", {
+    ["Title"] = "Mục Tiêu NPC / Quái",
+    ["Values"] = initialNPCs,
+    ["Multi"] = false,
+    ["Default"] = 1
+})
+npcDropdown:SetValue(_G.SelectedNPC)
+npcDropdown:OnChanged(function(val)
+    _G.SelectedNPC = val
+end)
+
+Tabs.Main:AddButton({
+    ["Title"] = "Quét Lại NPC Trong Map",
+    ["Callback"] = function()
+        local list = ScanMapNPCs()
+        npcDropdown:GetNewList(list)
+        if #list > 0 then
+            _G.SelectedNPC = list[1]
+            npcDropdown:SetValue(list[1])
+        end
+        pcall(function()
+            Library:Notify({
+                Title = "Quét Map NPC",
+                Description = "Tìm thấy " .. tostring(#list) .. " loại NPC/Quái.",
+                Duration = 3
+            })
+        end)
+    end
+})
+
+Tabs.Main:AddToggle("ToggleAutoFarmNPC", {
+    ["Title"] = "Auto Farm Mục Tiêu",
+    ["Default"] = false
+}):OnChanged(function(v)
+    _G.AutoFarmNPC = v
+end)
+
+Tabs.Main:AddToggle("ToggleBringMob", {
+    ["Title"] = "Gom Quái (Bring Mob)",
+    ["Default"] = false
+}):OnChanged(function(v)
+    _G.BringMob = v
+end)
+
+Tabs.Main:AddSlider("SliderBringRange", {
+    ["Title"] = "Bán Kính Gom Quái",
+    ["Default"] = 180,
+    ["Min"] = 30,
+    ["Max"] = 400,
+    ["Rounding"] = 5,
+    ["Callback"] = function(v)
+        _G.BringRange = v
+    end
+})
+
+Tabs.Main:AddToggle("ToggleFastAttack", {
+    ["Title"] = "Đánh Nhanh (Fast Attack)",
+    ["Default"] = false
+}):OnChanged(function(v)
+    _G.FastAttackActive = v
+end)
+
+-- Vòng lặp Auto Farm + Gom Quái
+task.spawn(function()
+    while task.wait(0.08) do
+        if _G.AutoFarmNPC then
+            pcall(function()
+                local mob = FindTargetMob(_G.SelectedNPC)
+                if mob then
+                    local mHrp = mob:FindFirstChild("HumanoidRootPart")
+                    local mHum = mob:FindFirstChildOfClass("Humanoid")
+                    local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+
+                    if mHrp and mHum and hrp then
+                        local anchorCF = mHrp.CFrame
+                        repeat
+                            task.wait(_G.Fast_Delay)
+                            if not _G.AutoFarmNPC or not mob.Parent or mHum.Health <= 0 then
+                                break
+                            end
+
+                            local currentMobCF = mHrp.CFrame
+                            if _G.BringMob then
+                                BringMobsTo(currentMobCF, _G.SelectedNPC)
+                            end
+
+                            local farmCF = currentMobCF * Pos
+                            if (farmCF.Position - hrp.Position).Magnitude > 4 then
+                                BKP(farmCF)
+                            end
+
+                            AutoHaki()
+                            EquipTool(SelectWeapon)
+                            AttackNoCoolDown()
+                        until not _G.AutoFarmNPC or not mob.Parent or mHum.Health <= 0
+                    end
+                end
+            end)
+        elseif _G.BringMob then
+            pcall(function()
+                local hrp = Player.Character and Player.Character:FindFirstChild("HumanoidRootPart")
+                if hrp then
+                    BringMobsTo(hrp.CFrame, nil)
+                end
+            end)
+        end
+    end
+end)
+
+-- Vòng lặp đánh nhanh độc lập
+task.spawn(function()
+    while task.wait(_G.Fast_Delay) do
+        if _G.FastAttackActive then
+            pcall(function()
+                AutoHaki()
+                AttackNoCoolDown()
+            end)
+        end
+    end
+end)
